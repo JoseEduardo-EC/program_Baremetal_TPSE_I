@@ -1,0 +1,168 @@
+#include "hw_types.h"
+#include "soc_AM335x.h"
+#include "bbb_regs.h"
+#include "timer.h"
+#include "intc.h"
+
+#define SET_MODE_POSTED       0x02
+
+#define ST_BIT                0x00
+#define W_PEND_TCLR           0x00
+#define W_PEND_TCRR           0x01
+#define W_PEND_TLDR           0x02
+
+/*
+========================================================
+       NAME: set_POSTED
+ PARAMETROS: Registrador base do timer 
+    RETORNO: void
+DESCRIPTION: Função que ativa o modo POSTED do timer
+========================================================
+*/
+void set_POSTED(unsigned int timer_base){
+    HWREG(timer_base + DMTIMER_TSICR) |= (1 << SET_MODE_POSTED);
+}
+
+/*
+========================================================
+       NAME: start_TIMER
+ PARAMETROS: Registrador base do timer 
+    RETORNO: void
+DESCRIPTION: Função que ativa o timer. Primeiro ela verifica se não tem nada pendente e depois seta o bit ST
+========================================================
+*/
+void start_TIMER(unsigned int timer_base){
+    //Enquanto for 1, fica no loop
+    while((HWREG(timer_base + DMTIMER_TWPS) >> W_PEND_TCLR) & 0x01);
+
+    //Ativa o bit ST
+    HWREG(timer_base + DMTIMER_TCLR) |= (1 << ST_BIT);
+}
+
+/*
+========================================================
+       NAME: stop_TIMER
+ PARAMETROS: Registrador base do timer 
+    RETORNO: void
+DESCRIPTION: Função que desliga o timer. Primeiro ela verifica se não tem nada pendente e depois limpa o bit ST
+========================================================
+*/
+void stop_TIMER(unsigned int timer_base){
+    //Enquanto for 1, fica no loop
+    while((HWREG(timer_base + DMTIMER_TWPS) >> W_PEND_TCLR) & 0x01);
+
+    //Desliga o bit ST
+    HWREG(timer_base + DMTIMER_TCLR) &= ~(1 << ST_BIT);
+}
+
+/*
+========================================================
+       NAME: reset_TIMER
+ PARAMETROS: Registrador base do timer 
+    RETORNO: void
+DESCRIPTION: Função que reseta o valor do do contador e do time loader. Primeiro ela verifica se não tem nada pendente
+========================================================
+*/
+void reset_TIMER(unsigned int timer_base){
+    while((HWREG(timer_base + DMTIMER_TWPS) >> W_PEND_TCRR) & 0x01);
+    HWREG(timer_base + DMTIMER_TCRR) = 0x00;
+
+    while((HWREG(timer_base + DMTIMER_TWPS) >> W_PEND_TLDR) & 0x01);
+    HWREG(timer_base + DMTIMER_TLDR) = 0x00;
+}
+
+/*
+========================================================
+       NAME: delay
+ PARAMETROS: Registrador base do timer e o tempo fornecido em mili segundos
+    RETORNO: void
+DESCRIPTION: Função que fica em espera ocupada até que o contador chegue ao valor de ciclos.
+             O contador incrementa a 24 Mhz.
+1 - Para o timer
+2 - reseta o contador TCRR e reseta o time loader
+3 - Começa a rodar o timer
+4 - Fica dentro do laço até TCRR chegar ao valor de ciclos
+5 - Para o timer
+========================================================
+*/
+void delay(unsigned int timer_base, unsigned int mili_segundos){
+    unsigned int ciclos = mili_segundos * 24000;
+    //Desliga o Timer inicialmente
+    stop_TIMER(timer_base);
+    //Reseta o qu etinha nates
+    reset_TIMER(timer_base);
+    //Começa o timer
+    start_TIMER(timer_base);
+    //POlling para saber se já bateu o deelay
+    while(HWREG(timer_base + DMTIMER_TCRR ) < ciclos);
+    //Desliga o Timer no final
+    stop_TIMER(timer_base);
+
+}
+
+/*
+========================================================
+       NAME: timer_enableIRQ_overflow
+ PARAMETROS: Registrador base do timer 
+    RETORNO: void
+DESCRIPTION: Função que seta o periférico Timer a receber interrupção quando o contador atingir overflow
+========================================================
+*/
+
+void timer_enableIRQ_overflow(unsigned int timer_base){
+    HWREG(timer_base + DMTIMER_IRQENABLE_SET) |= 0x02;
+}
+
+/*
+========================================================
+       NAME: timer_cleraIRQ_overflow
+ PARAMETROS: Registrador base do timer 
+    RETORNO: void
+DESCRIPTION: Função que limpa a flag de interrupção para overflow.
+             Sem ela, o Timer vai ficar disparando interrupções infinitamente
+========================================================
+*/
+
+void timer_clearIRQ_overflow(unsigned int timer_base){
+    HWREG(timer_base + DMTIMER_IRQSTATUS) = 0x02;
+}
+
+
+/*
+========================================================
+       NAME: timer_setupOverflow
+ PARAMETROS: Registrador base do timer, tempo em mili segundos
+    RETORNO: void
+DESCRIPTION: Função de delay que utiliza interrupção quando o contador atinge overflow
+========================================================
+*/
+
+void timer_setupOverflow(unsigned int timer_base, unsigned int mili_segundos){
+    //Calcula o delay
+    unsigned int ciclos = mili_segundos * 24000;
+    unsigned int carga = 0xFFFFFFFF - ciclos + 1;
+
+    //Para o timer
+    stop_TIMER(timer_base);
+
+    //Reseta o contador TCRR e o registrador de reload TLDR
+    while((HWREG(timer_base + DMTIMER_TWPS) >> W_PEND_TCRR) & 0x01);
+    HWREG(timer_base + DMTIMER_TCRR) = carga;
+    while((HWREG(timer_base + DMTIMER_TWPS) >> W_PEND_TLDR) & 0x01);
+    HWREG(timer_base + DMTIMER_TLDR) = carga;
+
+    //Ativa o bit AR, auto-reload automático
+    while((HWREG(timer_base + DMTIMER_TWPS) >> W_PEND_TCLR) & 0x01);
+    HWREG(timer_base + DMTIMER_TCLR) |= (1 << 1);
+
+    flag = 0;
+
+    //habilita a interrupçãoo para overflow no timer
+    timer_enableIRQ_overflow(timer_base);
+
+    //Liga o timer
+    start_TIMER(timer_base);
+
+    //Enquanto não sofrer interrupção (Overflow), fique aqui
+    while(!flag);
+}

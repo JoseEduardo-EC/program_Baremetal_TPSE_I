@@ -1,0 +1,20 @@
+#include "hw_types.h"
+#include "soc_AM335x.h"
+#include "pinmux.h"
+
+
+//Função para multiplexar o pino como GPIO
+void set_PINMUX_GPIO(void){
+    //botao
+    HWREG(SOC_CONTROL_REGS + CONF_GPMC_A1) |= CONF_GPMC_MODE_GPIO_IN;
+    HWREG(SOC_CONTROL_REGS + CONF_GPMC_AD13) |= CONF_GPMC_MODE_GPIO_IN;
+
+    //Leds internos
+    HWREG(SOC_CONTROL_REGS + CONF_GPMC_A5) |= CONF_GPMC_MODE_GPIO;
+    HWREG(SOC_CONTROL_REGS + CONF_GPMC_A6) |= CONF_GPMC_MODE_GPIO;
+    HWREG(SOC_CONTROL_REGS + CONF_GPMC_A7) |= CONF_GPMC_MODE_GPIO;
+    HWREG(SOC_CONTROL_REGS + CONF_GPMC_A8) |= CONF_GPMC_MODE_GPIO;
+
+    //Led externo
+    HWREG(SOC_CONTROL_REGS + CONF_LCD_DATA_1) |= CONF_GPMC_MODE_GPIO;
+}
