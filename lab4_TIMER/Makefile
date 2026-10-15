@@ -21,7 +21,12 @@ OBJS := $(OBJS:.s=.o)
 
 TARGET = bin/app_baremetal
 
-all: $(TARGET).bin
+all: dirs $(TARGET).bin
+
+dirs:
+	mkdir -p obj bin
+
+.PHONY: all dirs clean
 
 obj/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
